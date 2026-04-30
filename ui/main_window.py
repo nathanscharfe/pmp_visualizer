@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         
         # Initialize solutions
         self.optimal_solution = None
-        self.manual_solution = None
+        self.perturbed_solution = None
     
     def create_control_panel(self):
         """Create the left control panel."""
@@ -127,36 +127,43 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.solve_button)
         
         # ===== Manual Control =====
-        layout.addWidget(QLabel("\n━━ Manual Control ━━"))
+        layout.addWidget(QLabel("\n━━ PMP Solution Perturbation ━━"))
         
-        self.manual_enabled = QCheckBox("Enable Manual Control")
-        self.manual_enabled.setChecked(False)
-        self.manual_enabled.stateChanged.connect(self.on_manual_changed)
-        layout.addWidget(self.manual_enabled)
+        self.perturbation_enabled = QCheckBox("Enable PMP Perturbation")
+        self.perturbation_enabled.setChecked(False)
+        self.perturbation_enabled.stateChanged.connect(self.on_perturbation_changed)
+        layout.addWidget(self.perturbation_enabled)
         
-        layout.addWidget(QLabel("Control Type:"))
-        self.manual_type = QComboBox()
-        self.manual_type.addItems(["Constant", "Linear Ramp", "Sine Wave", "Step"])
-        layout.addWidget(self.manual_type)
+        layout.addWidget(QLabel("Perturbation Type:"))
+        self.perturbation_type = QComboBox()
+        self.perturbation_type.addItems(["Costate Initial Guess", "Control Noise", "Control Bias"])
+        layout.addWidget(self.perturbation_type)
         
-        layout.addWidget(QLabel("Control Amplitude:"))
-        self.manual_amp = QDoubleSpinBox()
-        self.manual_amp.setRange(-1.0, 1.0)
-        self.manual_amp.setValue(0.5)
-        self.manual_amp.setSingleStep(0.1)
-        layout.addWidget(self.manual_amp)
+        layout.addWidget(QLabel("Perturbation Strength:"))
+        self.perturbation_strength = QDoubleSpinBox()
+        self.perturbation_strength.setRange(0.0, 1.0)
+        self.perturbation_strength.setValue(0.1)
+        self.perturbation_strength.setSingleStep(0.01)
+        layout.addWidget(self.perturbation_strength)
         
-        layout.addWidget(QLabel("Frequency (for sine):"))
-        self.manual_freq = QDoubleSpinBox()
-        self.manual_freq.setRange(0.1, 5.0)
-        self.manual_freq.setValue(1.0)
-        self.manual_freq.setSingleStep(0.1)
-        layout.addWidget(self.manual_freq)
+        layout.addWidget(QLabel("Costate p₁₀ Guess:"))
+        self.p10_guess = QDoubleSpinBox()
+        self.p10_guess.setRange(-10, 10)
+        self.p10_guess.setValue(0.1)
+        self.p10_guess.setSingleStep(0.1)
+        layout.addWidget(self.p10_guess)
         
-        self.update_manual_button = QPushButton("Update Manual Solution")
-        self.update_manual_button.clicked.connect(self.update_manual)
-        self.update_manual_button.setEnabled(False)
-        layout.addWidget(self.update_manual_button)
+        layout.addWidget(QLabel("Costate p₂₀ Guess:"))
+        self.p20_guess = QDoubleSpinBox()
+        self.p20_guess.setRange(-10, 10)
+        self.p20_guess.setValue(0.1)
+        self.p20_guess.setSingleStep(0.1)
+        layout.addWidget(self.p20_guess)
+        
+        self.update_perturbation_button = QPushButton("Apply Perturbation")
+        self.update_perturbation_button.clicked.connect(self.apply_perturbation)
+        self.update_perturbation_button.setEnabled(False)
+        layout.addWidget(self.update_perturbation_button)
         
         # ===== Cost Comparison =====
         layout.addWidget(QLabel("\n━━ Results ━━"))
@@ -164,11 +171,11 @@ class MainWindow(QMainWindow):
         self.optimal_cost_label = QLabel("—")
         layout.addWidget(self.optimal_cost_label)
         
-        layout.addWidget(QLabel("Manual Cost (Energy):"))
+        layout.addWidget(QLabel("Perturbed Cost (Energy):"))
         self.manual_cost_label = QLabel("—")
         layout.addWidget(self.manual_cost_label)
         
-        layout.addWidget(QLabel("Cost Ratio (Manual/Optimal):"))
+        layout.addWidget(QLabel("Cost Ratio (Perturbed/Optimal):"))
         self.ratio_label = QLabel("—")
         layout.addWidget(self.ratio_label)
         
@@ -196,13 +203,14 @@ class MainWindow(QMainWindow):
         
         return widget
     
-    def on_manual_changed(self):
-        """Enable/disable manual control inputs."""
-        enabled = self.manual_enabled.isChecked()
-        self.manual_type.setEnabled(enabled)
-        self.manual_amp.setEnabled(enabled)
-        self.manual_freq.setEnabled(enabled)
-        self.update_manual_button.setEnabled(enabled)
+    def on_perturbation_changed(self):
+        """Enable/disable perturbation inputs."""
+        enabled = self.perturbation_enabled.isChecked()
+        self.perturbation_type.setEnabled(enabled)
+        self.perturbation_strength.setEnabled(enabled)
+        self.p10_guess.setEnabled(enabled)
+        self.p20_guess.setEnabled(enabled)
+        self.update_perturbation_button.setEnabled(enabled and self.optimal_solution is not None)
     
     def solve_optimal(self):
         """Solve the optimal control problem."""
@@ -221,53 +229,81 @@ class MainWindow(QMainWindow):
             optimal_cost = np.trapezoid(u**2, t)
             self.optimal_cost_label.setText(f"{optimal_cost:.4f}")
             
+            # Enable perturbation if it's checked
+            if self.perturbation_enabled.isChecked():
+                self.update_perturbation_button.setEnabled(True)
+            
             self.update_plots()
         except Exception as e:
             print(f"Error solving optimal problem: {e}")
             import traceback
             traceback.print_exc()
     
-    def update_manual(self):
-        """Compute manual control solution."""
+    def apply_perturbation(self):
+        """Apply perturbation to the PMP solution."""
         if self.optimal_solution is None:
             print("Solve optimal problem first!")
             return
         
         try:
-            T = self.T_spin.value()
-            control_type = self.manual_type.currentText()
-            amp = self.manual_amp.value()
-            freq = self.manual_freq.value()
+            perturbation_type = self.perturbation_type.currentText()
+            strength = self.perturbation_strength.value()
             
-            # Define control function based on type
-            if control_type == "Constant":
-                u_func = lambda t: amp
-            elif control_type == "Linear Ramp":
-                u_func = lambda t: amp * (2 * t / T - 1)
-            elif control_type == "Sine Wave":
-                u_func = lambda t: amp * np.sin(2 * np.pi * freq * t / T)
-            elif control_type == "Step":
-                u_func = lambda t: amp if t < T/2 else -amp
-            
-            # Simulate with manual control
-            x0 = [self.x0_spin.value(), self.v0_spin.value()]
-            xf = [self.xf_spin.value(), self.vf_spin.value()]
-            umax = self.umax_spin.value()
-            
-            problem = DoubleIntegratorProblem(x0, xf, T, umax)
-            self.manual_solution = problem.simulate_with_control(u_func)
+            if perturbation_type == "Costate Initial Guess":
+                # Use custom initial costate guess
+                p0_guess = [self.p10_guess.value(), self.p20_guess.value()]
+                
+                x0 = [self.x0_spin.value(), self.v0_spin.value()]
+                xf = [self.xf_spin.value(), self.vf_spin.value()]
+                T = self.T_spin.value()
+                umax = self.umax_spin.value()
+                
+                problem = DoubleIntegratorProblem(x0, xf, T, umax)
+                self.perturbed_solution = problem.solve(p0_guess)
+                
+            elif perturbation_type == "Control Noise":
+                # Add noise to optimal control
+                self.perturbed_solution = self.optimal_solution.copy()
+                u_opt = self.optimal_solution['u']
+                noise = np.random.normal(0, strength, len(u_opt))
+                u_perturbed = np.clip(u_opt + noise, -self.umax_spin.value(), self.umax_spin.value())
+                
+                # Re-simulate with perturbed control
+                x0 = [self.x0_spin.value(), self.v0_spin.value()]
+                xf = [self.xf_spin.value(), self.vf_spin.value()]
+                T = self.T_spin.value()
+                umax = self.umax_spin.value()
+                
+                problem = DoubleIntegratorProblem(x0, xf, T, umax)
+                self.perturbed_solution = problem.simulate_with_control(lambda t: u_perturbed[int(t/T * len(u_perturbed))])
+                
+            elif perturbation_type == "Control Bias":
+                # Add bias to optimal control
+                self.perturbed_solution = self.optimal_solution.copy()
+                u_opt = self.optimal_solution['u']
+                bias = strength * np.sin(np.linspace(0, 2*np.pi, len(u_opt)))
+                u_perturbed = np.clip(u_opt + bias, -self.umax_spin.value(), self.umax_spin.value())
+                
+                # Re-simulate with perturbed control
+                x0 = [self.x0_spin.value(), self.v0_spin.value()]
+                xf = [self.xf_spin.value(), self.vf_spin.value()]
+                T = self.T_spin.value()
+                umax = self.umax_spin.value()
+                
+                problem = DoubleIntegratorProblem(x0, xf, T, umax)
+                self.perturbed_solution = problem.simulate_with_control(lambda t: u_perturbed[int(t/T * len(u_perturbed))])
             
             # Update cost labels
-            manual_cost = self.manual_solution['cost']
+            perturbed_cost = self.perturbed_solution['cost'] if 'cost' in self.perturbed_solution else np.trapezoid(self.perturbed_solution['u']**2, self.perturbed_solution['t'])
             optimal_cost = float(self.optimal_cost_label.text())
-            ratio = manual_cost / optimal_cost if optimal_cost > 0 else 0
+            ratio = perturbed_cost / optimal_cost if optimal_cost > 0 else 0
             
-            self.manual_cost_label.setText(f"{manual_cost:.4f}")
+            self.manual_cost_label.setText(f"{perturbed_cost:.4f}")
             self.ratio_label.setText(f"{ratio:.2f}x")
             
             self.update_plots()
         except Exception as e:
-            print(f"Error computing manual solution: {e}")
+            print(f"Error applying perturbation: {e}")
             import traceback
             traceback.print_exc()
     
@@ -290,11 +326,11 @@ class MainWindow(QMainWindow):
         self.ax1.plot(t_opt, x_opt[:, 0], 'b-', label='Position (Optimal)', linewidth=2)
         self.ax1.plot(t_opt, x_opt[:, 1], 'r-', label='Velocity (Optimal)', linewidth=2)
         
-        if self.manual_solution is not None:
-            t_man = self.manual_solution['t']
-            x_man = self.manual_solution['x']
-            self.ax1.plot(t_man, x_man[:, 0], 'b--', label='Position (Manual)', linewidth=1.5, alpha=0.7)
-            self.ax1.plot(t_man, x_man[:, 1], 'r--', label='Velocity (Manual)', linewidth=1.5, alpha=0.7)
+        if self.perturbed_solution is not None:
+            t_pert = self.perturbed_solution['t']
+            x_pert = self.perturbed_solution['x']
+            self.ax1.plot(t_pert, x_pert[:, 0], 'b--', label='Position (Perturbed)', linewidth=1.5, alpha=0.7)
+            self.ax1.plot(t_pert, x_pert[:, 1], 'r--', label='Velocity (Perturbed)', linewidth=1.5, alpha=0.7)
         
         self.ax1.set_xlabel('Time (s)')
         self.ax1.set_ylabel('State')
@@ -306,11 +342,11 @@ class MainWindow(QMainWindow):
         self.ax2.plot(t_opt, u_opt, 'g-', linewidth=2.5, label='Optimal Control')
         
         # Plot manual control if available
-        if self.manual_solution is not None:
-            t_man = self.manual_solution['t']
-            u_man = self.manual_solution['u']
-            self.ax2.plot(t_man, u_man, 'orange', linewidth=1.5, linestyle='--', 
-                         label='Manual Control', alpha=0.7)
+        if self.perturbed_solution is not None:
+            t_pert = self.perturbed_solution['t']
+            u_pert = self.perturbed_solution['u']
+            self.ax2.plot(t_pert, u_pert, 'orange', linewidth=1.5, linestyle='--', 
+                         label='Perturbed Control', alpha=0.7)
         
         self.ax2.axhline(self.umax_spin.value(), color='k', linestyle='--', alpha=0.3)
         self.ax2.axhline(-self.umax_spin.value(), color='k', linestyle='--', alpha=0.3)
@@ -325,10 +361,10 @@ class MainWindow(QMainWindow):
         self.ax3.plot(x_opt[0, 0], x_opt[0, 1], 'go', markersize=10, label='Start')
         self.ax3.plot(x_opt[-1, 0], x_opt[-1, 1], 'ro', markersize=10, label='End')
         
-        if self.manual_solution is not None:
-            x_man = self.manual_solution['x']
-            self.ax3.plot(x_man[:, 0], x_man[:, 1], 'orange', linewidth=1.5, 
-                         linestyle='--', label='Manual', alpha=0.7)
+        if self.perturbed_solution is not None:
+            x_pert = self.perturbed_solution['x']
+            self.ax3.plot(x_pert[:, 0], x_pert[:, 1], 'orange', linewidth=1.5, 
+                         linestyle='--', label='Perturbed', alpha=0.7)
         
         self.ax3.set_xlabel('Position')
         self.ax3.set_ylabel('Velocity')
@@ -353,12 +389,12 @@ class MainWindow(QMainWindow):
         self.ax5.grid(True, alpha=0.3)
         
         # ===== Plot 6: Cost Comparison =====
-        if self.manual_solution is not None:
+        if self.perturbed_solution is not None:
             costs = [
                 float(self.optimal_cost_label.text()),
                 float(self.manual_cost_label.text())
             ]
-            labels = ['Optimal', 'Manual']
+            labels = ['Optimal', 'Perturbed']
             colors = ['green', 'orange']
             bars = self.ax6.bar(labels, costs, color=colors, alpha=0.7, edgecolor='black')
             
@@ -373,7 +409,7 @@ class MainWindow(QMainWindow):
             self.ax6.set_title('Cost Comparison')
             self.ax6.grid(True, alpha=0.3, axis='y')
         else:
-            self.ax6.text(0.5, 0.5, 'Enable manual control\nto compare costs',
+            self.ax6.text(0.5, 0.5, 'Enable perturbation\nto compare costs',
                          ha='center', va='center', transform=self.ax6.transAxes,
                          fontsize=11, style='italic', color='gray')
             self.ax6.set_title('Cost Comparison')
