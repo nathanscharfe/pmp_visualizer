@@ -44,8 +44,34 @@ class MainWindow(QMainWindow):
         main_group = QGroupBox("Settings")
         layout = QVBoxLayout()
         
-        # ===== Optimal Control Problem Parameters =====
-        layout.addWidget(QLabel("━━ Problem Parameters ━━"))
+        # ===== Problem Statement =====
+        problem_text = """
+        <b>Double Integrator Optimal Control Problem</b><br><br>
+        
+        <b>System Dynamics:</b><br>
+        ẋ₁ = x₂<br>
+        ẋ₂ = u<br><br>
+        
+        <b>Control Constraints:</b><br>
+        |u| ≤ u_max<br><br>
+        
+        <b>Cost Function:</b><br>
+        J = ∫ u²(t) dt<br><br>
+        
+        <b>Boundary Conditions:</b><br>
+        x(0) = [x₀, ẋ₀]<br>
+        x(T) = [xf, ẋf]<br><br>
+        
+        <b>Goal:</b> Find control u(t) that minimizes energy cost<br>
+        while satisfying boundary conditions.
+        """
+        
+        problem_label = QLabel(problem_text)
+        problem_label.setWordWrap(True)
+        problem_label.setStyleSheet("border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;")
+        layout.addWidget(problem_label)
+        
+        layout.addWidget(QLabel("\n━━ Problem Parameters ━━"))
         
         # Initial position
         layout.addWidget(QLabel("Initial Position (x₀):"))
