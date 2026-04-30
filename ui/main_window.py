@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
             # Compute cost for optimal
             u = self.optimal_solution['u']
             t = self.optimal_solution['t']
-            optimal_cost = np.trapz(u**2, t)
+            optimal_cost = np.trapezoid(u**2, t)
             self.optimal_cost_label.setText(f"{optimal_cost:.4f}")
             
             self.update_plots()

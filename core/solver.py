@@ -147,7 +147,7 @@ class DoubleIntegratorProblem:
         u_traj = np.array([u_func(ti) for ti in t])
         
         # Compute cost (integral of u^2)
-        cost = np.trapz(u_traj**2, t)
+        cost = np.trapezoid(u_traj**2, t)
         
         return {
             't': t,
