@@ -261,11 +261,18 @@ class MainWindow(QMainWindow):
         H_opt = self.optimal_solution['H']
         
         # ===== Plot 1: State Trajectory =====
-        self.ax1.plot(t_opt, x_opt[:, 0], 'b-', label='Position', linewidth=2)
-        self.ax1.plot(t_opt, x_opt[:, 1], 'r-', label='Velocity', linewidth=2)
+        self.ax1.plot(t_opt, x_opt[:, 0], 'b-', label='Position (Optimal)', linewidth=2)
+        self.ax1.plot(t_opt, x_opt[:, 1], 'r-', label='Velocity (Optimal)', linewidth=2)
+        
+        if self.manual_solution is not None:
+            t_man = self.manual_solution['t']
+            x_man = self.manual_solution['x']
+            self.ax1.plot(t_man, x_man[:, 0], 'b--', label='Position (Manual)', linewidth=1.5, alpha=0.7)
+            self.ax1.plot(t_man, x_man[:, 1], 'r--', label='Velocity (Manual)', linewidth=1.5, alpha=0.7)
+        
         self.ax1.set_xlabel('Time (s)')
         self.ax1.set_ylabel('State')
-        self.ax1.set_title('State Trajectory (Optimal)')
+        self.ax1.set_title('State Trajectory')
         self.ax1.legend()
         self.ax1.grid(True, alpha=0.3)
         
@@ -308,7 +315,7 @@ class MainWindow(QMainWindow):
         self.ax4.plot(t_opt, p_opt[:, 1], 'r-', label='p₂', linewidth=2)
         self.ax4.set_xlabel('Time (s)')
         self.ax4.set_ylabel('Costate')
-        self.ax4.set_title('Costate Trajectory (p)')
+        self.ax4.set_title('Costate Trajectory (p)\n(Optimal Solution Only)')
         self.ax4.legend()
         self.ax4.grid(True, alpha=0.3)
         
@@ -316,7 +323,7 @@ class MainWindow(QMainWindow):
         self.ax5.plot(t_opt, H_opt, 'purple', linewidth=2)
         self.ax5.set_xlabel('Time (s)')
         self.ax5.set_ylabel('H(t)')
-        self.ax5.set_title('Hamiltonian')
+        self.ax5.set_title('Hamiltonian\n(Optimal Solution Only)')
         self.ax5.grid(True, alpha=0.3)
         
         # ===== Plot 6: Cost Comparison =====
