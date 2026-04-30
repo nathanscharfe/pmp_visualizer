@@ -275,7 +275,8 @@ class MainWindow(QMainWindow):
                 umax = self.umax_spin.value()
                 
                 problem = DoubleIntegratorProblem(x0, xf, T, umax)
-                self.perturbed_solution = problem.simulate_with_control(lambda t: u_perturbed[int(t/T * len(u_perturbed))])
+                idx_func = lambda t: min(int(t/T * len(u_perturbed)), len(u_perturbed) - 1)
+                self.perturbed_solution = problem.simulate_with_control(lambda t: u_perturbed[idx_func(t)])
                 
             elif perturbation_type == "Control Bias":
                 # Add bias to optimal control
@@ -291,7 +292,8 @@ class MainWindow(QMainWindow):
                 umax = self.umax_spin.value()
                 
                 problem = DoubleIntegratorProblem(x0, xf, T, umax)
-                self.perturbed_solution = problem.simulate_with_control(lambda t: u_perturbed[int(t/T * len(u_perturbed))])
+                idx_func = lambda t: min(int(t/T * len(u_perturbed)), len(u_perturbed) - 1)
+                self.perturbed_solution = problem.simulate_with_control(lambda t: u_perturbed[idx_func(t)])
             
             # Update cost labels
             perturbed_cost = self.perturbed_solution['cost'] if 'cost' in self.perturbed_solution else np.trapezoid(self.perturbed_solution['u']**2, self.perturbed_solution['t'])
