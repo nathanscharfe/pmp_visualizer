@@ -28,13 +28,13 @@ class DoubleIntegratorProblem:
         self.T = T
         self.umax = control_bound
         
-    def dynamics(self, t, y):
+    def dynamics(self, y, t):
         """
         Full augmented dynamics: [x, lambda]
         
         Args:
-            t: Time
             y: [x_pos, x_vel, lambda_1, lambda_2]
+            t: Time
         
         Returns:
             dy/dt
